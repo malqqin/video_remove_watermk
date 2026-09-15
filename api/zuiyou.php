@@ -40,7 +40,8 @@ function getParamFromUrl(string $url, string $param): ?string
     }
 
     parse_str($parsedUrl['query'], $queryParams);
-    return $queryParams[$param] ?? null;
+    $value = $queryParams[$param] ?? null;
+    return is_string($value) ? $value : null;
 }
 
 /**
@@ -160,53 +161,19 @@ function curlRequest(string $url, ?array $headers = null, $data = null)
     return $result;
 }
 
-// 初始化响应数据
-$responseData = null;
-
-// 获取并验证输入URL（修复编码和参数截断问题）
-$url = '';
-if (isset($_SERVER['QUERY_STRING'])) {
-    // 找到"url="在查询字符串中的位置
-    $urlStart = strpos($_SERVER['QUERY_STRING'], 'url=');
-    if ($urlStart !== false) {
-        // 从"url="之后截取剩余字符串（包含所有参数）
-        $urlPart = substr($_SERVER['QUERY_STRING'], $urlStart + 4);
-        // 解码URL（处理%26等编码字符）
-        $url = rawurldecode($urlPart);
+function parseZuiyou(string $url): array
+{
+    $url = trim($url);
+    if (!filter_var($url, FILTER_VALIDATE_URL)
+        || !in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+        return outputJson(400, '请输入有效的URL');
     }
-}
-$url = trim($url);
 
-if (empty($url)) {
-    $responseData = outputJson(201, '请输入url');
-}
-
-// 验证URL是否为空
-if (empty($url)) {
-    $responseData = outputJson(201, '请输入url');
-}
-
-// 验证URL格式
-if ($responseData === null && !filter_var($url, FILTER_VALIDATE_URL)) {
-    $responseData = outputJson(201, '请输入有效的URL');
-}
-
-// 提取pid和vid参数
-$pid = null;
-$vid = null;
-
-if ($responseData === null) {
     $pid = getParamFromUrlWithRedirect($url, 'pid');
-    if (empty($pid)) {
-        $responseData = outputJson(201, '找不到有效的pid参数（包括重定向后）');
+    if ($pid === null || !ctype_digit($pid) || (int)$pid <= 0) {
+        return outputJson(400, '找不到有效的pid参数（包括重定向后）');
     }
-}
-if ($responseData === null) {
-    $vid = getParamFromUrlWithRedirect($url, 'vid');
-}
 
-// 调用API获取数据
-if ($responseData === null) {
     $apiUrl = 'https://share.xiaochuankeji.cn/planck/share/post/detail_h5';
     $requestData = json_encode([
         'pid' => (int)$pid,
@@ -220,36 +187,43 @@ if ($responseData === null) {
 
     $apiResponse = curlRequest($apiUrl, $headers, $requestData);
     if ($apiResponse === false) {
-        $responseData = outputJson(500, 'API请求失败');
-    } else {
-        $data = json_decode($apiResponse, true);
-
-        // 检查JSON解析是否成功
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $responseData = outputJson(500, 'API响应解析失败: ' . json_last_error_msg());
-        } else {
-            // 安全提取数据，避免未定义索引错误
-            $postData = $data['data']['post'] ?? [];
-            $memberData = $postData['member'] ?? [];
-            $videosData = $postData['videos'] ?? [];
-            $imgsData = $postData['imgs'][0] ?? [];
-            $vid = $imgsData['id'];
-            if (empty($vid)) {
-                $responseData = outputJson(201, '找不到有效的vid参数（包括重定向后）');
-            }
-            $json = [
-                'author' => $memberData['name'] ?? null,
-                'avatar' => $memberData['avatar_urls']['origin']['urls'][0] ?? null,
-                'title' => $postData['content'] ?? null,
-                'cover' => $imgsData['urls']['540_webp']['urls'][0] ?? null,
-                'url' => $videosData[$vid]['url'] ?? null,
-            ];
-
-            $responseData = outputJson(200, '请求成功', $json);
-        }
+        return outputJson(502, '最右接口请求失败');
     }
+    $data = json_decode($apiResponse, true);
+    if (!is_array($data)) {
+        return outputJson(502, '最右接口未返回有效的 JSON');
+    }
+    return formatZuiyouResponse($data);
 }
 
-// 输出最终JSON结果
-echo json_encode($responseData, 480);
-?>
+function formatZuiyouResponse(array $data): array
+{
+    if (isset($data['ret']) && (int)$data['ret'] !== 1) {
+        return outputJson(502, '最右接口返回错误');
+    }
+    $postData = $data['data']['post'] ?? [];
+    $memberData = $postData['member'] ?? [];
+    $videosData = $postData['videos'] ?? [];
+    $imgsData = $postData['imgs'][0] ?? [];
+    $vid = $imgsData['id'] ?? null;
+    $videoUrl = $vid === null ? null : ($videosData[$vid]['url'] ?? null);
+    if (!is_string($videoUrl) || !filter_var($videoUrl, FILTER_VALIDATE_URL)
+        || !in_array(parse_url($videoUrl, PHP_URL_SCHEME), ['http', 'https'], true)) {
+        return outputJson(404, '最右未返回可播放的视频');
+    }
+    return outputJson(200, '请求成功', [
+        'type' => 'video',
+        'author' => $memberData['name'] ?? null,
+        'avatar' => $memberData['avatar_urls']['origin']['urls'][0] ?? null,
+        'title' => $postData['content'] ?? null,
+        'cover' => $imgsData['urls']['540_webp']['urls'][0] ?? null,
+        'url' => $videoUrl,
+    ]);
+}
+
+if (!defined('SV2_LIBRARY_ONLY')) {
+    $url = $_POST['url'] ?? $_GET['url'] ?? '';
+    $responseData = parseZuiyou(is_string($url) ? $url : '');
+    http_response_code($responseData['code']);
+    echo json_encode($responseData, 480);
+}

@@ -40,7 +40,8 @@ function extractParamsFromUrl($url)
     parse_str($parsedUrl['query'], $params);
     $pid = $params['pid'] ?? null;
     $mid = $params['mid'] ?? null;
-    if ($pid === null || $mid === null) {
+    if (!is_string($pid) || !ctype_digit($pid) || (int)$pid <= 0
+        || !is_string($mid) || !ctype_digit($mid) || (int)$mid <= 0) {
         return false;
     }
     return ['pid' => $pid, 'mid' => $mid];
@@ -93,7 +94,7 @@ function processApiResponse($apiResponse)
     }
     $decodedResponse = json_decode($response, true);
     if ($decodedResponse === null) {
-        return formatResponse(500, '响应内容不是有效的 JSON 数据: '. $response);
+        return formatResponse(502, '响应内容不是有效的 JSON 数据');
     }
     if (!isset($decodedResponse['data']['post'])) {
         return formatResponse(500, '响应中缺少 data.post 字段');
@@ -122,32 +123,26 @@ function processApiResponse($apiResponse)
 
 function parsePipigx(string $url): array
 {
+    $params = extractParamsFromUrl($url);
+    if ($params === false) {
+        return formatResponse(400, '请提供包含有效 pid 和 mid 的分享链接');
+    }
 
-// 提取参数
-$params = extractParamsFromUrl($url);
-if ($params === false) {
-    return formatResponse(400, '请提供包含 pid 和 mid 的分享链接');
-}
+    $apiurl = 'https://h5.pipigx.com/ppapi/share/fetch_content';
+    $payload = [
+        'pid' => (int)$params['pid'],
+        'mid' => (int)$params['mid'],
+        'type' => 'post'
+    ];
 
-// 构建请求体数据
-$apiurl = 'https://h5.pipigx.com/ppapi/share/fetch_content';
-$payload = [
-    "pid" => (int)$params['pid'],
-    "mid" => (int)$params['mid'],
-    "type" => "post"
-];
-
-// 发送请求
-$apiResponse = sendPostRequest($apiurl, $payload);
-$finalResponse = processApiResponse($apiResponse);
-return $finalResponse;
+    return processApiResponse(sendPostRequest($apiurl, $payload));
 }
 
 // 设置 HTTP 状态码并输出响应
 if (!defined('SV2_LIBRARY_ONLY')) {
-$url = $_POST['url'] ?? $_GET['url'] ?? '';
-$finalResponse = parsePipigx(is_string($url) ? $url : '');
-http_response_code($finalResponse['code']);
-echo json_encode($finalResponse, 480);
+    $url = $_POST['url'] ?? $_GET['url'] ?? '';
+    $finalResponse = parsePipigx(is_string($url) ? $url : '');
+    http_response_code($finalResponse['code']);
+    echo json_encode($finalResponse, 480);
 }
 ?>
