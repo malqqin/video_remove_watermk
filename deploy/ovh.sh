@@ -6,8 +6,8 @@ main() {
     local repo_url='https://github.com/malqqin/video_remove_watermk.git'
     local deploy_dir='/opt/video_remove_watermk'
     local env_file='/etc/video-remove-watermk/parser.env'
-    local listen_port="${PORT:-80}"
-    local bind_address="${BIND_ADDRESS:-0.0.0.0}"
+    local listen_port="${PORT:-8000}"
+    local bind_address="${BIND_ADDRESS:-127.0.0.1}"
     local compose_package='' candidate container_id state attempt
     local -a compose
 
@@ -82,7 +82,7 @@ main() {
     compose+=(--project-name video-remove-watermk --file "$deploy_dir/compose.yaml")
     "${compose[@]}" config --quiet
     if ! "${compose[@]}" up --detach --build; then
-        echo "Deployment failed. If TCP $listen_port is already occupied, identify its owner before replacing that service:" >&2
+        echo "Deployment failed. If TCP $listen_port is already occupied, choose a different unused PORT and keep the existing service running:" >&2
         echo "sudo ss -ltnp '( sport = :$listen_port )'" >&2
         return 1
     fi
@@ -91,10 +91,15 @@ main() {
         state=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
         if [[ $state == healthy ]]; then
             echo "Deployed commit $(git rev-parse --short HEAD)."
-            echo "API: http://SERVER_IP:$listen_port/short_videos/sv2.php?url=ENCODED_VIDEO_URL"
+            echo "Server-local API: http://127.0.0.1:$listen_port/short_videos/sv2.php?url=ENCODED_VIDEO_URL"
             echo 'Parser cookies, if needed: /etc/video-remove-watermk/parser.env'
             echo "Logs: cd $deploy_dir && sudo docker compose -p video-remove-watermk logs --tail=100 -f api"
-            echo "For public access, allow TCP $listen_port in the host firewall and OVH network firewall if enabled."
+            if [[ $bind_address == '127.0.0.1' ]]; then
+                echo 'Public access: add deploy/nginx-location.conf inside the existing site server block, then validate and reload Nginx.'
+                echo "Ensure proxy_pass uses port $listen_port. Existing Nginx and port 3000 services stay running."
+            else
+                echo "For public access, allow TCP $listen_port in the host firewall and OVH network firewall if enabled."
+            fi
             return 0
         fi
         [[ $state != unhealthy ]] || break
