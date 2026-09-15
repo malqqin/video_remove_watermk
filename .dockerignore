@@ -1,0 +1,14 @@
+*
+!Dockerfile
+!api/
+!api/**
+!short_videos/
+!short_videos/**
+!img/
+!img/**
+!tests/
+!tests/platform-regression.php
+!deploy/
+!deploy/apache.conf
+!deploy/php.ini
+!deploy/healthcheck.php

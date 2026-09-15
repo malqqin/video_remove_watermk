@@ -99,7 +99,7 @@
 - **极速响应**：快速解析视频链接，响应迅速
 - **结构化数据**：返回标准 JSON 格式数据
 - **易于集成**：简单的 API 接口，便于集成
-- **零配置部署**：无需安装依赖，上传即用
+- **容器部署**：支持一键安装运行环境并从 GitHub 更新
 
 ---
 
@@ -124,20 +124,22 @@
 
 ### 环境要求
 
-- **PHP 8.0** 或更高版本
+- **PHP 8.0** 或更高版本，启用 cURL、OpenSSL 扩展
 - Web 服务器 (Apache/Nginx)
-- 无需额外依赖！
+- `short_videos/sv2.php` 本地抖音解析需要 **Node.js 22** 和 PHP `proc_open`
+
+Ubuntu/Debian VPS（包括 OVH）推荐使用 [一键部署脚本与说明](deploy/README.md)，自动配置 PHP 8.4、Apache 和 Node.js 22。
 
 ### 1. 下载代码
 
 ```bash
-git clone https://github.com/jiuhunwl/short_videos.git
-cd short_videos
+git clone https://github.com/malqqin/video_remove_watermk.git
+cd video_remove_watermk
 ```
 
 ### 2. 部署到服务器
 
-将 PHP 文件上传到您的 Web 服务器即可使用，无需任何配置！
+可使用上述容器部署脚本，或按环境要求配置 Web 服务器并将项目根目录设为站点目录。本地聚合接口为 `/short_videos/sv2.php?url=视频链接`，原视频链接应进行 URL 编码。
 
 ---
 
