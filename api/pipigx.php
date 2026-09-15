@@ -64,6 +64,8 @@ function sendPostRequest($apiurl, $payload)
     curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     $response = curl_exec($ch);
@@ -84,8 +86,8 @@ function sendPostRequest($apiurl, $payload)
  */
 function processApiResponse($apiResponse)
 {
-    $httpCode = $apiResponse['code'];
-    $response = $apiResponse['response'];
+    $httpCode = $apiResponse['code'] ?? 502;
+    $response = $apiResponse['response'] ?? '';
     if ($httpCode >= 400) {
         return formatResponse($httpCode, 'HTTP 错误发生: HTTP 状态码 '. $httpCode);
     }
@@ -106,32 +108,25 @@ function processApiResponse($apiResponse)
         }
     }
     $arr = [
-        'title' => $json['content'],
+        'type' => 'video',
+        'title' => $json['content'] ?? '',
         'cover' =>  "https://file.ippzone.com/img/frame/id/".($videoData[0]['thumb'] ?? ''),
-        'video' => $videoData[0]['url']
+        'video' => $videoData[0]['url'] ?? '',
+        'url' => $videoData[0]['url'] ?? '',
     ];
+    if ($arr['url'] === '') {
+        return formatResponse(404, '未找到可播放的视频');
+    }
     return formatResponse(200, '解析成功', $arr);
 }
 
-// 获取 URL 参数
-$url = null;
-if (isset($_GET['url'])) {
-    $url = $_SERVER['REQUEST_URI'];
-} elseif (isset($_POST['url'])) {
-    $url = $_POST['url'];
-}
-if ($url === null) {
-    http_response_code(400);
-    echo json_encode(formatResponse(400, '未提供 url 参数'), 480);
-    exit;
-}
+function parsePipigx(string $url): array
+{
 
 // 提取参数
 $params = extractParamsFromUrl($url);
 if ($params === false) {
-    http_response_code(400);
-    echo json_encode(formatResponse(400, '提取参数出错'), 480);
-    exit;
+    return formatResponse(400, '请提供包含 pid 和 mid 的分享链接');
 }
 
 // 构建请求体数据
@@ -145,8 +140,14 @@ $payload = [
 // 发送请求
 $apiResponse = sendPostRequest($apiurl, $payload);
 $finalResponse = processApiResponse($apiResponse);
+return $finalResponse;
+}
 
 // 设置 HTTP 状态码并输出响应
+if (!defined('SV2_LIBRARY_ONLY')) {
+$url = $_POST['url'] ?? $_GET['url'] ?? '';
+$finalResponse = parsePipigx(is_string($url) ? $url : '');
 http_response_code($finalResponse['code']);
 echo json_encode($finalResponse, 480);
+}
 ?>

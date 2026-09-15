@@ -13,7 +13,7 @@ header('content-type:application/json; charset=utf-8');
 
 // 定义常量
 const MAX_REDIRECTS = 10;
-const CURL_TIMEOUT = 5000;
+const CURL_TIMEOUT = 15;
 
 // 初始化 CURL 选项
 function initCurlOptions($ch, $url, $header = null, $data = null)
@@ -26,6 +26,7 @@ function initCurlOptions($ch, $url, $header = null, $data = null)
     curl_setopt($ch, CURLOPT_AUTOREFERER, 1);
     curl_setopt($ch, CURLOPT_MAXREDIRS, MAX_REDIRECTS);
     curl_setopt($ch, CURLOPT_TIMEOUT, CURL_TIMEOUT);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
 
     if (isset($header)) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
@@ -75,17 +76,25 @@ function curl($url, $header = null, $data = null)
     return $result;
 }
 
+function pipixiaItemId(string $url): ?string
+{
+    $path = parse_url($url, PHP_URL_PATH) ?: '';
+    return preg_match('~/item/(\d+)(?:/|$)~', $path, $matches) ? $matches[1] : null;
+}
+
 function pipixia($url)
 {
     try {
-        $url = getRedirectUrl($url);
-        $newurl = getRedirectUrl($url);
-        preg_match('/item\/(.*)\?/', $url, $id);
-        if (!isset($id[1])) {
+        $id = pipixiaItemId($url);
+        if ($id === null) {
+            $url = getRedirectUrl($url);
+            $id = pipixiaItemId($url);
+        }
+        if ($id === null) {
             return ['code' => 404, 'msg' => '无法从 URL 中提取视频 ID'];
         }
 
-        $apiUrl = "https://h5.pipix.com/bds/cell/cell_h5_comment/?count=5&aid=1319&app_name=super&cell_id={$id[1]}";
+        $apiUrl = "https://h5.pipix.com/bds/cell/cell_h5_comment/?count=5&aid=1319&app_name=super&cell_id={$id}";
         $response = curl($apiUrl);
         $arr = json_decode($response, true);
 
@@ -134,6 +143,7 @@ function pipixia($url)
 }
 
 // 主程序
+if (!defined('SV2_LIBRARY_ONLY')) {
 $result = [];
 $url = isset($_GET['url']) ? $_GET['url'] : '';
 if (empty($url)) {
@@ -144,4 +154,5 @@ if (empty($url)) {
 }
 
 echo json_encode($result, 480);
+}
 ?>

@@ -15,7 +15,7 @@ function toutiao($url)
     // 构造请求数据
     $header = array(
         "User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36",
-        "Cookie: 自行更新");
+        'Cookie: ' . (getenv('TOUTIAO_COOKIE') ?: ''));
     // 尝试从 URL 中获取视频 ID
     $id = extractId($url);
     // 检查 ID 是否有效
@@ -86,6 +86,10 @@ function toutiao($url)
 
 function extractId($url)
 {
+    $path = parse_url($url, PHP_URL_PATH) ?: '';
+    if (preg_match('~/(?:video|i)/(\d+)|/i(\d+)~', $path, $matches)) {
+        return $matches[1] !== '' ? $matches[1] : $matches[2];
+    }
     $headers = get_headers($url, true);
     if ($headers === false) {
         // 如果获取头信息失败，直接使用原始 URL
@@ -124,7 +128,8 @@ function curl($url, $header = null, $data = null)
         curl_setopt($con, CURLOPT_POST, true);
         curl_setopt($con, CURLOPT_POSTFIELDS, $data);
     }
-    curl_setopt($con, CURLOPT_TIMEOUT, 5000);
+    curl_setopt($con, CURLOPT_TIMEOUT, 15);
+    curl_setopt($con, CURLOPT_CONNECTTIMEOUT, 5);
     $result = curl_exec($con);
     if ($result === false) {
         // 处理 curl 错误
@@ -139,6 +144,7 @@ function curl($url, $header = null, $data = null)
 
 
 // 使用空合并运算符检查 url 参数
+if (!defined('SV2_LIBRARY_ONLY')) {
 $url = $_GET['url'] ?? '';
 if (empty($url)) {
     echo json_encode(['code' => 201, 'msg' => 'url为空'], 480);
@@ -149,5 +155,6 @@ if (empty($url)) {
     } else {
         echo json_encode($response, 480);
     }
+}
 }
 ?>

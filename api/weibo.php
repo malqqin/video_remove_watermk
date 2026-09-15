@@ -13,28 +13,35 @@ header("Access-Control-Allow-Origin: *");
 
 define('MAX_REDIRECTS', 5);
 define('TIMEOUT', 30);
+define('CONNECTION_TIMEOUT', 5);
 
 function main()
 {
     $params = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
     $url = $params['url'] ?? '';
 
-    if (empty($url)) {
-        outputError('参数url不能为空', 400);
-    }
+    outputSuccess(parseWeibo(is_string($url) ? $url : ''));
+}
 
+function parseWeibo(string $url): array
+{
+    if ($url === '') {
+        return ['code' => 400, 'msg' => '参数url不能为空'];
+    }
     $videoId = extractVideoId($url);
     if (empty($videoId)) {
-        outputError("无法从URL中提取视频ID: {$url}", 404);
+        return ['code' => 400, 'msg' => '请提供微博视频链接（包含 fid 或 /tv/show/）'];
     }
 
     $headers = getRequestHeaders();
-    $result = fetchVideoInfo($videoId, $headers);
-    outputSuccess($result);
+    return fetchVideoInfo($videoId, $headers);
 }
 
-function extractVideoId($url)
+function extractVideoId($url, $redirects = 0)
 {
+    if ($redirects >= MAX_REDIRECTS) {
+        return '';
+    }
     $id = '';
 
     if (strpos($url, 'video.weibo.com/show') !== false) {
@@ -56,10 +63,10 @@ function extractVideoId($url)
         }
     } else if (strpos($url, 't.cn/') !== false) {
         $redirectUrl = getRedirectUrl($url);
-        $id = !empty($redirectUrl) ? extractVideoId($redirectUrl) : '';
+        $id = !empty($redirectUrl) ? extractVideoId($redirectUrl, $redirects + 1) : '';
     }
 
-    return $id;
+    return preg_match('/^\d+:\d+$/', $id) ? $id : '';
 }
 
 function getRedirectUrl($url)
@@ -89,7 +96,7 @@ function getRequestHeaders()
 {
     //微博web端cookie
     return [
-        'cookie: ',
+        'cookie: ' . (getenv('WEIBO_COOKIE') ?: ''),
         'referer: https://weibo.com/',
         'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
     ];
@@ -117,11 +124,22 @@ function fetchVideoInfo($videoId, $headers)
 
     $responseData = json_decode($response, true);
     if (JSON_ERROR_NONE !== json_last_error()) {
-        return ['code' => 500, 'msg' => 'API响应解析失败', 'raw' => $response];
+        return ['code' => 502, 'msg' => '微博返回非 JSON，可能需要有效的 WEIBO_COOKIE'];
     }
 
+    return formatWeiboResponse($responseData);
+}
+
+function weiboMediaUrl($url): string
+{
+    if (!is_string($url)) return '';
+    $url = str_starts_with($url, '//') ? 'https:' . $url : $url;
+    return filter_var($url, FILTER_VALIDATE_URL) && in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true) ? $url : '';
+}
+
+function formatWeiboResponse(array $responseData): array
+{
     if (isset($responseData['code']) && $responseData['code'] == 100000 && !empty($responseData['data']['Component_Play_Playinfo'])) {
-        $proxyBase = "https://svproxy.168299.xyz/?type=weibo&proxyurl=";
         $videoInfo = $responseData['data']['Component_Play_Playinfo'];
 
         $backupUrls = [];
@@ -129,7 +147,8 @@ function fetchVideoInfo($videoId, $headers)
 
         if (isset($videoInfo['urls']) && is_array($videoInfo['urls'])) {
             foreach ($videoInfo['urls'] as $quality => $url) {
-                $fullUrl = $proxyBase . base64_encode('https:' . $url);
+                $fullUrl = weiboMediaUrl($url);
+                if ($fullUrl === '') continue;
                 $qualityKey = 'unknown';
                 $priority = 0;
 
@@ -159,6 +178,9 @@ function fetchVideoInfo($videoId, $headers)
         }
 
         $mainUrl = $bestQuality['url'];
+        if ($mainUrl === '') {
+            return ['code' => 404, 'msg' => '微博未返回可播放的视频'];
+        }
         $mainQuality = $bestQuality['quality'];
 
         $duration = 0;
@@ -168,12 +190,12 @@ function fetchVideoInfo($videoId, $headers)
 
         $avatar = '';
         if (!empty($videoInfo['avatar'])) {
-            $avatar = $proxyBase . base64_encode('https:' . $videoInfo['avatar']);
+            $avatar = weiboMediaUrl($videoInfo['avatar']);
         }
 
         $cover = '';
         if (!empty($videoInfo['cover_image'])) {
-            $cover = $proxyBase . base64_encode('https:' . $videoInfo['cover_image']);
+            $cover = weiboMediaUrl($videoInfo['cover_image']);
         }
 
         return [
@@ -281,4 +303,6 @@ function outputError($message, $code = 500)
     exit;
 }
 
-main();
+if (!defined('SV2_LIBRARY_ONLY')) {
+    main();
+}
