@@ -6,7 +6,7 @@ main() {
     local repo_url='https://github.com/malqqin/video_remove_watermk.git'
     local deploy_dir='/opt/video_remove_watermk'
     local env_file='/etc/video-remove-watermk/parser.env'
-    local listen_port="${PORT:-8000}"
+    local listen_port="${PORT:-80}"
     local bind_address="${BIND_ADDRESS:-0.0.0.0}"
     local compose_package='' candidate container_id state attempt
     local -a compose
@@ -81,7 +81,11 @@ main() {
     cd "$deploy_dir"
     compose+=(--project-name video-remove-watermk --file "$deploy_dir/compose.yaml")
     "${compose[@]}" config --quiet
-    "${compose[@]}" up --detach --build
+    if ! "${compose[@]}" up --detach --build; then
+        echo "Deployment failed. If TCP $listen_port is already occupied, identify its owner before replacing that service:" >&2
+        echo "sudo ss -ltnp '( sport = :$listen_port )'" >&2
+        return 1
+    fi
     container_id=$("${compose[@]}" ps -q api)
     for attempt in {1..30}; do
         state=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")

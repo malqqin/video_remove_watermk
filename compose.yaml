@@ -6,7 +6,7 @@ services:
     image: video-remove-watermk:local
     restart: unless-stopped
     ports:
-      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8000}:80"
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-80}:80"
     env_file:
       - /etc/video-remove-watermk/parser.env
     init: true

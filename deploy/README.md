@@ -1,6 +1,6 @@
 # OVH 部署（Ubuntu / Debian）
 
-使用 PHP 8.4 + Apache、Node.js 22 的 Docker 容器，无需数据库。默认通过服务器的 `8000` 端口访问；解析请求由仓库中的本地解析器处理。
+使用 PHP 8.4 + Apache、Node.js 22 的 Docker 容器，无需数据库。默认通过服务器的 `80` 端口访问，浏览器地址无需加端口号；解析请求由仓库中的本地解析器处理。
 
 先将本目录、根目录 `Dockerfile`、`.dockerignore`、`compose.yaml` 推送到 GitHub 的 `main` 分支，再在已 SSH 登录的服务器终端执行：
 
@@ -14,26 +14,35 @@ curl -fsSL https://raw.githubusercontent.com/malqqin/video_remove_watermk/main/d
 
 ## 访问与检查
 
-浏览器打开 `http://服务器IP:8000/short_videos/sv2.php?url=https%3A%2F%2Fwww.bilibili.com%2Fvideo%2FBV1RiY56SEbU%2F`。
+浏览器打开 `http://服务器IP/short_videos/sv2.php?url=https%3A%2F%2Fwww.bilibili.com%2Fvideo%2FBV1RiY56SEbU%2F`。
 
 也可在服务器执行，cURL 会保留原视频链接中所有参数：
 
 ```bash
 curl --get --data-urlencode 'url=https://www.bilibili.com/video/BV1RiY56SEbU/' \
-  http://127.0.0.1:8000/short_videos/sv2.php
+  http://127.0.0.1/short_videos/sv2.php
 ```
 
-不传 `url` 返回 HTTP 400 是预期行为，容器健康检查也使用此方式，不会反复请求视频平台。公网访问需要主机防火墙和已启用的 OVH 网络防火墙允许 TCP 8000。平台接口是否可访问仍取决于 OVH 出口 IP、视频链接有效性和平台登录要求。
+不传 `url` 返回 HTTP 400 是预期行为，容器健康检查也使用此方式，不会反复请求视频平台。公网访问需要主机防火墙和已启用的 OVH 网络防火墙允许 TCP 80。平台接口是否可访问仍取决于 OVH 出口 IP、视频链接有效性和平台登录要求。
 
 ## 端口、域名和 Cookie
 
-端口占用时，例如改用 8080：
+替换原有的 80 端口服务时，先确认占用者，再停止对应服务或容器，重新执行部署命令：
+
+```bash
+sudo ss -ltnp '( sport = :80 )'
+sudo docker ps --format 'table {{.Names}}\t{{.Ports}}'
+```
+
+脚本更新本项目的现有容器时会自动重建；其他服务的替换需按实际占用者处理。
+
+也可以指定其他端口，例如 8080：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malqqin/video_remove_watermk/main/deploy/ovh.sh | sudo env PORT=8080 bash
 ```
 
-如果已有 Nginx/Caddy 用于域名和 HTTPS，部署时设置 `BIND_ADDRESS=127.0.0.1`，反向代理到 `127.0.0.1:8000`。使用自定义端口或绑定地址时，之后每次更新也传相同变量。
+如果已有 Nginx/Caddy 用于域名和 HTTPS，部署时设置 `BIND_ADDRESS=127.0.0.1 PORT=8080`，反向代理到 `127.0.0.1:8080`。使用自定义端口或绑定地址时，之后每次更新也传相同变量。
 
 Cookie 保存在 `/etc/video-remove-watermk/parser.env`，不会提交到 GitHub 或打包进镜像。只有平台需要登录时才填写对应值，每行一个变量，例如：
 
