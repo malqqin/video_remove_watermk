@@ -8,7 +8,7 @@ main() {
     local env_file='/etc/video-remove-watermk/parser.env'
     local listen_port="${PORT:-8000}"
     local bind_address="${BIND_ADDRESS:-127.0.0.1}"
-    local compose_package='' candidate container_id state attempt
+    local compose_package='' candidate container_id state attempt published_ports
     local -a compose
 
     [[ $EUID -eq 0 ]] || { echo 'Run with sudo bash deploy/ovh.sh (or as root).' >&2; return 1; }
@@ -73,6 +73,11 @@ main() {
     systemctl enable --now docker
     docker info >/dev/null
 
+    if ! command -v ss >/dev/null; then
+        apt-get update
+        apt-get install -y iproute2
+    fi
+
     install -d -m 700 /etc/video-remove-watermk
     if [[ ! -f "$env_file" ]]; then
         install -m 600 /dev/null "$env_file"
@@ -81,6 +86,18 @@ main() {
     cd "$deploy_dir"
     compose+=(--project-name video-remove-watermk --file "$deploy_dir/compose.yaml")
     "${compose[@]}" config --quiet
+    container_id=$("${compose[@]}" ps -q api)
+    if ss -H -ltn "sport = :$listen_port" | grep -q .; then
+        published_ports=''
+        if [[ -n "$container_id" ]] && [[ $(docker inspect --format '{{.State.Running}}' "$container_id") == true ]]; then
+            published_ports=$(docker inspect --format '{{range $port, $bindings := .NetworkSettings.Ports}}{{range $bindings}}{{println .HostIp .HostPort}}{{end}}{{end}}' "$container_id")
+        fi
+        if ! grep -Eq "(^|[[:space:]])$listen_port([[:space:]]|$)" <<<"$published_ports"; then
+            echo "TCP $listen_port is already used by another service. Keep that service running and choose an unused PORT:" >&2
+            ss -ltnp "sport = :$listen_port" >&2 || true
+            return 1
+        fi
+    fi
     if ! "${compose[@]}" up --detach --build; then
         echo "Deployment failed. If TCP $listen_port is already occupied, choose a different unused PORT and keep the existing service running:" >&2
         echo "sudo ss -ltnp '( sport = :$listen_port )'" >&2
