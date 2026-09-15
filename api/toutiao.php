@@ -90,7 +90,8 @@ function extractId($url)
     if (preg_match('~/(?:video|i)/(\d+)|/i(\d+)~', $path, $matches)) {
         return $matches[1] !== '' ? $matches[1] : $matches[2];
     }
-    $headers = get_headers($url, true);
+    $context = stream_context_create(['http' => ['timeout' => 8, 'max_redirects' => 5]]);
+    $headers = get_headers($url, true, $context);
     if ($headers === false) {
         // 如果获取头信息失败，直接使用原始 URL
         $loc = $url;

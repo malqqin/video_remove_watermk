@@ -50,7 +50,7 @@ try {
         case 'weibo':
             require dirname(__DIR__) . '/api/weibo.php';
             check(sv2ParseWeibo('https://weibo.com/')['code'], 400, 'invalid input returns without exit');
-            check(CONNECTION_TIMEOUT, 5, 'connection timeout defined');
+            check(WEIBO_CONNECT_TIMEOUT, 5, 'connection timeout defined');
             check(extractVideoId('https://weibo.com/tv/show/1034:123456789'), '1034:123456789', 'TV ID');
             check(extractVideoId('https://video.weibo.com/show?fid=1034%3A123456789'), '1034:123456789', 'encoded fid');
             $fixture = ['code' => 100000, 'data' => ['Component_Play_Playinfo' => [

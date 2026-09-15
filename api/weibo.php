@@ -13,7 +13,7 @@ header("Access-Control-Allow-Origin: *");
 
 define('MAX_REDIRECTS', 5);
 define('TIMEOUT', 30);
-define('CONNECTION_TIMEOUT', 5);
+define('WEIBO_CONNECT_TIMEOUT', 5);
 
 function main()
 {
@@ -79,7 +79,7 @@ function getRedirectUrl($url)
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     curl_setopt($ch, CURLOPT_TIMEOUT, TIMEOUT);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, CONNECTION_TIMEOUT);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, WEIBO_CONNECT_TIMEOUT);
     curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
     curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 256);
     curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, 8);
@@ -245,7 +245,7 @@ function sendCurlRequest($url, $postData = '', $headers = [], $isJsonResponse = 
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_MAXREDIRS, MAX_REDIRECTS);
     curl_setopt($ch, CURLOPT_TIMEOUT, TIMEOUT);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, CONNECTION_TIMEOUT);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, WEIBO_CONNECT_TIMEOUT);
     curl_setopt($ch, CURLOPT_NOSIGNAL, 1);
     curl_setopt($ch, CURLOPT_LOW_SPEED_LIMIT, 256);
     curl_setopt($ch, CURLOPT_LOW_SPEED_TIME, 8);
